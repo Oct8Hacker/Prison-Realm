@@ -1,5 +1,5 @@
 #pragma once
-#include "necessary.h"
+#include "necessary.hpp"
 #include <sys/epoll.h>
 #include <netinet/in.h>
 class DNSServer{

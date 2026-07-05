@@ -1,4 +1,5 @@
 #include "server.hpp"
+#include "dns_parser.hpp"
 DNSServer::DNSServer(int port) : _port(port), _server_fd(-1), _epoll_fd(-1), _running(false) {}
 DNSServer::~DNSServer(){ stop(); }
 bool DNSServer::initSocket(){
@@ -67,8 +68,7 @@ bool DNSServer::start(){
                 while (true) {
                     // edge triggered so we will drain completely
                     std::memset(buffer, 0, sizeof(buffer));
-                    int bytes_read = (int)recvfrom(_server_fd, buffer, sizeof(buffer), 0,
-                                                  (struct sockaddr*)&client_addr, &client_len);
+                    int bytes_read = (int)recvfrom(_server_fd, buffer, sizeof(buffer), 0, (struct sockaddr*)&client_addr, &client_len);
                     
                     if (bytes_read < 0) {
                         if (errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -78,11 +78,15 @@ bool DNSServer::start(){
                         break;
                     }
                     std::cout << "[*] Intercepted raw DNS query! Size: " << bytes_read << " bytes." << std::endl;
+                    DNSHeader* header = reinterpret_cast<DNSHeader*>(buffer);
+                    int offset = sizeof(DNSHeader);
+                    std::string domain = DNSParser::extractDomainName(buffer, offset);
+                    std::cout << "[>>>] Client is requesting: " << domain << std::endl;
                 }
             }
         }
-        return true;
     }
+    return true;
 }
 void DNSServer::stop(){
     if (!_running) return;

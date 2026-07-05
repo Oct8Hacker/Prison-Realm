@@ -5,3 +5,6 @@
 #include <fcntl.h>
 #include <cstring>
 #include <sys/socket.h>
+#include <cstdint>
+#include <string>
+#include <algorithm>
