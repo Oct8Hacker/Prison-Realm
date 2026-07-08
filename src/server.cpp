@@ -18,18 +18,7 @@ bool DNSServer::initSocket(){
         return false;
     }
     int opt = 1;
-    // setsockopt(_server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt));
-    setsockopt(_server_fd,
-           SOL_SOCKET,
-           SO_REUSEADDR,
-           &opt,
-           sizeof(opt));
-
-    setsockopt(_server_fd,
-            SOL_SOCKET,
-            SO_REUSEPORT,
-            &opt,
-            sizeof(opt));
+    setsockopt(_server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt));
     // initialise the struct for that port
     sockaddr_in addr{};
     memset(&addr, 0, sizeof(addr));

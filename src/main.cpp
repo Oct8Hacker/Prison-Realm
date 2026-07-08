@@ -12,7 +12,7 @@ void handle_signal(int sig) {
 }
 int main() {
     // testing on 5353
-    DNSServer server(5353);
+    DNSServer server(53);
     global_server = &server;
     std::signal(SIGINT, handle_signal);
     std::signal(SIGTERM, handle_signal);
