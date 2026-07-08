@@ -63,21 +63,15 @@ bool DNSServer::initEpoll(){
     }
     return true;
 }
-int DNSServer::buildSinkholeResponse(const char* query_buffer, int query_len, char* response_buffer) {
-    // this header file is made with the help of AI i dont know each and every specifications of the DNS packet
+int DNSServer::buildSinkholeResponse(const char* query_buffer, int query_len, char* response_buffer, uint16_t qtype) {
     // 1. Copy the entire original query (Header + Question) into our response buffer
     std::memcpy(response_buffer, query_buffer, query_len);
     
     // 2. Modify the Header
     DNSHeader* header = reinterpret_cast<DNSHeader*>(response_buffer);
-    
-    // Set Flags: 0x8180 (Standard Query Response, No Error)
-    // htons() ensures the bytes are in Network Order (Big Endian)
-    header->flags = htons(0x8180); 
-    
-    // Set Answer Count to 1
-    header->ancount = htons(1);
-    
+    header->flags = htons(0x8180); // Standard Query Response, No Error
+    header->ancount = htons(1);    // 1 Answer Record
+    header->arcount = 0;
     // 3. Append the Answer Record at the end of the query
     int offset = query_len;
     
@@ -85,31 +79,40 @@ int DNSServer::buildSinkholeResponse(const char* query_buffer, int query_len, ch
     response_buffer[offset++] = 0xC0;
     response_buffer[offset++] = 0x0C;
     
-    // Type: A Record (IPv4) = 1 (0x0001)
-    response_buffer[offset++] = 0x00;
-    response_buffer[offset++] = 0x01;
+    if (qtype == 28) {
+        // --- IPv6 (AAAA) RESPONSE ---
+        response_buffer[offset++] = 0x00; response_buffer[offset++] = 0x1C; // Type: 28 (0x001C)
+        response_buffer[offset++] = 0x00; response_buffer[offset++] = 0x01; // Class: IN
+        
+        // TTL: 600 seconds
+        response_buffer[offset++] = 0x00; response_buffer[offset++] = 0x00; 
+        response_buffer[offset++] = 0x02; response_buffer[offset++] = 0x58; 
+        
+        // Data Length: 16 bytes for an IPv6 address
+        response_buffer[offset++] = 0x00; response_buffer[offset++] = 0x10; 
+        
+        // The IP Address: 16 bytes of zeros (::)
+        for(int i = 0; i < 16; i++) {
+            response_buffer[offset++] = 0x00;
+        }
+    } else {
+        // --- IPv4 (A) RESPONSE (Default fallback) ---
+        response_buffer[offset++] = 0x00; response_buffer[offset++] = 0x01; // Type: 1 (0x0001)
+        response_buffer[offset++] = 0x00; response_buffer[offset++] = 0x01; // Class: IN
+        
+        // TTL: 600 seconds
+        response_buffer[offset++] = 0x00; response_buffer[offset++] = 0x00; 
+        response_buffer[offset++] = 0x02; response_buffer[offset++] = 0x58; 
+        
+        // Data Length: 4 bytes for an IPv4 address
+        response_buffer[offset++] = 0x00; response_buffer[offset++] = 0x04; 
+        
+        // The IP Address: 0.0.0.0
+        response_buffer[offset++] = 0x00; response_buffer[offset++] = 0x00; 
+        response_buffer[offset++] = 0x00; response_buffer[offset++] = 0x00;
+    }
     
-    // Class: IN (Internet) = 1 (0x0001)
-    response_buffer[offset++] = 0x00;
-    response_buffer[offset++] = 0x01;
-    
-    // TTL: 600 seconds (0x00000258)
-    response_buffer[offset++] = 0x00;
-    response_buffer[offset++] = 0x00;
-    response_buffer[offset++] = 0x02;
-    response_buffer[offset++] = 0x58;
-    
-    // Data Length: 4 bytes for an IPv4 address (0x0004)
-    response_buffer[offset++] = 0x00;
-    response_buffer[offset++] = 0x04;
-    
-    // The IP Address: 0.0.0.0
-    response_buffer[offset++] = 0x00;
-    response_buffer[offset++] = 0x00;
-    response_buffer[offset++] = 0x00;
-    response_buffer[offset++] = 0x00;
-    
-    return offset; // Return the new total packet size
+    return offset; 
 }
 int DNSServer::forwardToUpstream(const char* query_buffer, int query_len, char* response_buffer){
     int burner_socket = socket(AF_INET, SOCK_DGRAM, 0);
@@ -182,6 +185,9 @@ bool DNSServer::start(){
                     DNSHeader* header = reinterpret_cast<DNSHeader*>(buffer);
                     int offset = sizeof(DNSHeader);
                     std::string domain = DNSParser::extractDomainName(buffer, offset);
+                    uint8_t* ubuffer = reinterpret_cast<uint8_t*>(buffer);
+                    uint16_t q_type = (ubuffer[offset] << 8) | (ubuffer[offset + 1]); 
+                    int question_len = offset + 4;
                     std::cout << "[>>>] Ingress Request: " << domain << std::endl;
                     if(_blocklist.search(domain)){
                         std::cout << "[X] INTERCEPTED: ";
@@ -190,7 +196,7 @@ bool DNSServer::start(){
                         }
                         std::cout << " resolved through sinkhole matrix." << std::endl;
                         char response_buffer[4096];
-                        int response_len = buildSinkholeResponse(buffer, bytes_read, response_buffer);
+                        int response_len = buildSinkholeResponse(buffer, question_len, response_buffer, q_type);
                         
                         sendto(_server_fd, response_buffer, response_len, 0, 
                             (struct sockaddr*)&client_addr, client_len);

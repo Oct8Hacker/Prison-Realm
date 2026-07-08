@@ -21,6 +21,6 @@ class DNSServer{
         ~DNSServer();
         bool start();
         void stop();
-        int buildSinkholeResponse(const char* query_buffer, int query_len, char* response_buffer);
+        int buildSinkholeResponse(const char* query_buffer, int query_len, char* response_buffer, uint16_t q_type);
         int forwardToUpstream(const char* query_buffer, int query_len, char* response_buffer);
 };

@@ -14,11 +14,8 @@ int main() {
     // testing on 5353
     DNSServer server(5353);
     global_server = &server;
-    if (!server.start()) {
-        std::cerr << "[-] Failed to start DNS Server." << std::endl;
-        return 1;
-    }
     std::signal(SIGINT, handle_signal);
     std::signal(SIGTERM, handle_signal);
+    server.start();
     return 0;
 }
