@@ -17,7 +17,7 @@ public:
     Trie() {
         trie.emplace_back();
     }
-    void insert(std::string &word); 
-    bool search(std::string &word);
+    void insert(const std::string &word); 
+    bool search(const std::string &word);
     bool loadFromFile(const std::string &filepath);
 };

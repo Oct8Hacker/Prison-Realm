@@ -4,7 +4,7 @@
 
 # Compiler and standard
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Wextra -O2 -Iinclude
+CXXFLAGS = -std=c++17 -Wall -Wextra -O2 -Iinclude -pthread
 
 # Output executable name
 TARGET = build/dns_server

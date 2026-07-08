@@ -2,12 +2,14 @@
 Vertex::Vertex(){
     std::fill(next, next + 38, -1);
 }
-void Trie::insert(std::string &word) {
+void Trie::insert(const std::string &word) {
     int v = 0;
-    std::reverse(word.begin(), word.end());
-    for(char c: word){
+    for (int i = word.length() - 1; i >= 0; i--) {
+        char c = word[i];
         int ind = charToIndex(c);
-        if(ind == -1)return;
+        
+        if(ind == -1) continue; 
+        
         if(trie[v].next[ind] == -1){
             trie[v].next[ind] = trie.size();
             trie.emplace_back();
@@ -16,15 +18,17 @@ void Trie::insert(std::string &word) {
     }
     trie[v].output = true;
 }
-bool Trie::search(std::string &word) {
+bool Trie::search(const std::string &word) {
     int v = 0;
-    std::reverse(word.begin(), word.end());
-    for(char c: word){
+    for (int i = word.length() - 1; i >= 0; i--) {
+        char c = word[i];
+        if (trie[v].output && c == '.') {
+            return true;
+        }
         int index = charToIndex(c);
-        if(index == -1)return false;
-        if(index == -1)continue;
-        if(trie[v].next[index] == -1)return false;
-        if(trie[v].output)return true;
+        if (index == -1) return false;
+        if (trie[v].next[index] == -1) return false;
+        
         v = trie[v].next[index];
     }
     return trie[v].output;
@@ -47,6 +51,9 @@ bool Trie::loadFromFile(const std::string &filepath){
     int count = 0;
     while(std::getline(file, line)){
         if(line.empty() || line[0] == '#')continue;
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }   
         std::istringstream iss(line);
         std::string ip, domain;
         iss>>ip>>domain;

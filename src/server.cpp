@@ -1,6 +1,7 @@
 #include "server.hpp"
 #include "dns_parser.hpp"
 #include <sys/time.h>
+#include <thread>
 #include <arpa/inet.h>
 DNSServer::DNSServer(int port) : _port(port), _server_fd(-1), _epoll_fd(-1), _running(false), _cache(1e4) {}
 DNSServer::~DNSServer(){ stop(); }
@@ -23,7 +24,7 @@ bool DNSServer::initSocket(){
     sockaddr_in addr{};
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
     addr.sin_port = htons(_port);
     // here you bind the socket to the port
     if (bind(_server_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
@@ -109,8 +110,8 @@ int DNSServer::forwardToUpstream(const char* query_buffer, int query_len, char* 
         return -1;
     }
     struct timeval  tv;
-    tv.tv_sec = 1;
-    tv.tv_usec = 0;
+    tv.tv_sec = 0;
+    tv.tv_usec = 300000;
     setsockopt(burner_socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
     sockaddr_in upstream_addr{};
@@ -129,6 +130,9 @@ int DNSServer::forwardToUpstream(const char* query_buffer, int query_len, char* 
     }
     socklen_t upstream_len = sizeof(upstream_addr);
     int bytes_received = recvfrom(burner_socket, response_buffer, 4096, 0, (struct sockaddr*)&upstream_addr, &upstream_len);
+    std::cout << "[DEBUG] Upstream returned "
+          << bytes_received
+          << " bytes\n";
     close(burner_socket);
     return bytes_received;
 }
@@ -176,11 +180,11 @@ bool DNSServer::start(){
                     std::string domain = DNSParser::extractDomainName(buffer, offset);
                     uint8_t* ubuffer = reinterpret_cast<uint8_t*>(buffer);
                     uint16_t q_type = (ubuffer[offset] << 8) | (ubuffer[offset + 1]); 
+                    std::cout << "TYPE = " << q_type << '\n';
                     int question_len = offset + 4;
-                    std::cout << "[>>>] Ingress Request: " << domain << std::endl;
                     if(_blocklist.search(domain)){
                         std::cout << "[X] INTERCEPTED: ";
-                        for(int i = domain.size() - 1;i>=0;i--){
+                        for(int i = 0;i<domain.size();i++){
                             std::cout<<domain[i];
                         }
                         std::cout << " resolved through sinkhole matrix." << std::endl;
@@ -197,30 +201,40 @@ bool DNSServer::start(){
                         * or better i could just make a LRU cache and give it to him, but i cant allow the server to talk to 
                         * the dns server on the same port it needs to be done by a different port * 
                         */
-                        std::vector<char>cached_response;
+                        std::string cache_key = domain + "|" + std::to_string(q_type);
+                        std::vector<char> cached_response;
                         int cached_query_size = 0;
-                        if(_cache.get(domain, cached_response, cached_query_size)){
-                            std::cout << "[*] CACHE HIT: "; 
-                            for(int i = domain.size() - 1;i>=0;i--){
-                                std::cout<<domain[i];
-                            }
-                            std::cout<<" served from RAM." << std::endl;
+                        if(_cache.get(cache_key, cached_response, cached_query_size)){
+                            // std::cout << "[*] CACHE HIT: " << domain << " (Type " << q_type << ") served from RAM." << std::endl;
+                            
                             DNSHeader* cached_header = reinterpret_cast<DNSHeader*>(cached_response.data());
                             DNSHeader* client_header = reinterpret_cast<DNSHeader*>(buffer);
                             cached_header->id = client_header->id; 
+                            
                             sendto(_server_fd, cached_response.data(), cached_response.size(), 0, 
                             (struct sockaddr*)&client_addr, client_len);
-                        }else{
-                            std::cout << "[!] CACHE MISS: ";
-                            for(int i = domain.size() - 1;i>=0;i--){
-                                std::cout<<domain[i];
-                            }
-                            std::cout<< " forwarding to 8.8.8.8..." << std::endl;
-                            char response_buffer[4096];
-                            int response_len = forwardToUpstream(buffer, bytes_read, response_buffer);
-                            sendto(_server_fd, response_buffer, response_len, 0, 
-                                (struct sockaddr*)&client_addr, client_len);
-                            _cache.put(domain, response_buffer, response_len, bytes_read, 300);
+                        } else {
+                            // std::cout << "[!] CACHE MISS: " << domain << " forwarding to 8.8.8.8..." << std::endl;
+                            std::string query_str(buffer, bytes_read);
+                            
+                            // 2. Spawn a background thread, passing our variables by value so they survive the loop
+                            std::thread([this, query_str, cache_key, client_addr, client_len, bytes_read]() {
+                                char response_buffer[4096];
+                                
+                                // Use the thread's local copy of the query
+                                int response_len = forwardToUpstream(query_str.data(), query_str.size(), response_buffer);
+                                
+                                if (response_len > 0) {
+                                    // UDP sendto is natively thread-safe in the Linux kernel
+                                    sendto(_server_fd, response_buffer, response_len, 0, 
+                                        (struct sockaddr*)&client_addr, client_len);
+                                    
+                                    // Our cache is now thread-safe due to the mutex!
+                                    _cache.put(cache_key, response_buffer, response_len, bytes_read, 300);
+                                } else {
+                                    std::cerr << "[-] Upstream timeout for thread process." << std::endl;
+                                }
+                            }).detach(); // 3. Detach the thread so epoll instantly moves to the next packet
                         }
                     }
                 }

@@ -3,6 +3,7 @@ LRUCache::LRUCache(int capacity){
     this->capacity = capacity;
 }
 void LRUCache::put(const std::string& domain, const char* response_buffer, int response_size, int query_size, int ttl_seconds){ 
+    std::lock_guard<std::mutex> lock(_mtx);
     auto it = umpp.find(domain);
     if(it == umpp.end()){
         if(umpp.size() == capacity){
@@ -23,6 +24,7 @@ void LRUCache::put(const std::string& domain, const char* response_buffer, int r
     }
 }
 bool LRUCache::get(const std::string& domain, std::vector<char>&output_data, int &out_query_size){
+    std::lock_guard<std::mutex> lock(_mtx);
     auto it = umpp.find(domain);
     if(it == umpp.end()){
         return false; // no data with me;
