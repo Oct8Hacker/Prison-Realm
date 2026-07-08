@@ -2,7 +2,7 @@
 #include <list>
 #include <chrono>
 #include <unordered_map>
-#include <mutex> // --- 1. ADD THIS HEADER ---
+#include <mutex> 
 #include "necessary.hpp"
 
 struct CacheEntry{
@@ -17,7 +17,7 @@ class LRUCache{
         std::list<std::string> lru;
         std::unordered_map<std::string, std::pair<std::list<std::string>::iterator, CacheEntry>>umpp;
         
-        std::mutex _mtx; // --- 2. ADD THE MUTEX ---
+        std::mutex _mtx; 
 
     public:
         LRUCache(int capacity);

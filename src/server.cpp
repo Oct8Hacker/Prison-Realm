@@ -145,14 +145,7 @@ bool DNSServer::start(){
     char buffer[4096];
     sockaddr_in client_addr{};
     socklen_t client_len = sizeof(client_addr);
-
-
-    // change this when doing final testing
     _blocklist.loadFromFile("data/blocklist.txt");
-    // std::string temp = "netflix.com";
-
-
-    // _blocklist.insert(temp);
     while(_running) {
         int num_events = epoll_wait(_epoll_fd, _events, MAX_EVENTS, -1);
         if (num_events < 0) {
