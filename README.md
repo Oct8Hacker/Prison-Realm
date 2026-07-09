@@ -1,4 +1,4 @@
-# Prison-Realm
+# Null-Gate
 
 Prison-Realm is a lightweight C++ DNS sinkhole server that blocks known ad/tracker domains using a local blocklist.
 
